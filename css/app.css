@@ -401,6 +401,10 @@ h3.titulo-form{margin:0 0 4px; font:600 14.5px var(--fonte-titulo);}
   .topo-titulo span{font-size:13.5px;}
 }
 
+/* "Reduzir movimento" do sistema: tira as animações do uso diário,
+   mas a abertura (vinheta da marca) continua — ela é curta e pulável. */
 @media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{animation-duration:.01ms !important; animation-delay:0s !important; transition-duration:.01ms !important;}
+  *:not(#abertura, #abertura *),
+  *:not(#abertura, #abertura *)::before,
+  *:not(#abertura, #abertura *)::after{animation-duration:.01ms !important; animation-delay:0s !important; transition-duration:.01ms !important;}
 }

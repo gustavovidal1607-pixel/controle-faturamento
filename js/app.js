@@ -90,15 +90,22 @@
       caixa.innerHTML = svg;
     } catch { caixa.innerHTML = '<img src="img/logo.svg" alt="Faturas Med">'; }
     const tela = $('#abertura');
+    const foto = $('.abertura-foto', tela);
+    // Espera a foto estar pronta (no máximo 1,5 s) para a sequência não
+    // começar com o fundo vazio.
+    await Promise.race([foto.decode().catch(() => {}), new Promise(r => setTimeout(r, 1500))]);
     requestAnimationFrame(() => tela.classList.add('animar'));
-    const reduzido = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const espera = new Promise(r => setTimeout(r, reduzido ? 300 : 3600));
+    // A sequência inteira dura ~3,4 s; segura mais um pouco no final.
+    // Um clique na tela pula a espera.
+    let pular;
+    const espera = new Promise(r => { pular = r; setTimeout(r, 4300); });
+    tela.addEventListener('click', () => pular(), { once: true });
     let usuario = null;
     try { usuario = (await api('/api/auth?acao=eu')).usuario; } catch {}
     await espera;
     if (usuario) entrar(usuario); else mostrarLogin();
     tela.classList.add('saindo');
-    setTimeout(() => tela.remove(), 500);
+    setTimeout(() => tela.remove(), 600);
   }
 
   // ---------------------------------------------------------------- login
