@@ -8,11 +8,12 @@
 
   const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const MESES_CURTO = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
-  const LIMITE_PDF = 4 * 1024 * 1024;
+  const LIMITE_PDF = 100 * 1024 * 1024; // teto de segurança
   const MAX_ANEXOS = 10;
 
   const estado = {
     usuario: null,
+    direto: false,        // true = PDF vai do navegador direto para o armazenamento (produção)
     aba: 'guias',
     mes: null,            // AAAA-MM selecionado
     meses: [],
@@ -101,7 +102,7 @@
     const espera = new Promise(r => { pular = r; setTimeout(r, 4300); });
     tela.addEventListener('click', () => pular(), { once: true });
     let usuario = null;
-    try { usuario = (await api('/api/auth?acao=eu')).usuario; } catch {}
+    try { const r = await api('/api/auth?acao=eu'); usuario = r.usuario; estado.direto = !!r.direto; } catch {}
     await espera;
     if (usuario) entrar(usuario); else mostrarLogin();
     tela.classList.add('saindo');
@@ -147,6 +148,7 @@
         return;
       }
       $('#login-senha').value = '';
+      estado.direto = !!dados.direto;
       entrar(dados.usuario);
     } catch {
       erro.textContent = 'Sem conexão com o servidor. Confira a internet e tente de novo.';
@@ -264,7 +266,7 @@
           <label class="soltar" id="soltar">
             <input type="file" name="pdf" accept="application/pdf,.pdf">
             <strong>Arraste o PDF aqui ou <u>escolha o arquivo</u></strong>
-            <small id="dica-pdf">Só PDF, até 4 MB.</small>
+            <small id="dica-pdf">Só PDF.</small>
           </label>
           <ul class="arquivos" id="lista-arquivos"></ul>
         </fieldset>
@@ -296,11 +298,11 @@
       if (tipo === 'honorario'){
         inputPdf.multiple = true;
         $('#rotulo-pdf').textContent = 'PDFs do honorário';
-        $('#dica-pdf').textContent = `Só PDF, até 4 MB cada, no máximo ${MAX_ANEXOS}. Pode escolher vários de uma vez.`;
+        $('#dica-pdf').textContent = `Só PDF, no máximo ${MAX_ANEXOS}. Pode escolher vários de uma vez.`;
       } else {
         inputPdf.multiple = false;
         $('#rotulo-pdf').textContent = 'PDF da guia';
-        $('#dica-pdf').textContent = 'Só PDF, até 4 MB. Um arquivo só.';
+        $('#dica-pdf').textContent = 'Só PDF. Um arquivo só.';
         if (arquivosEscolhidos.length > 1) arquivosEscolhidos = arquivosEscolhidos.slice(0, 1);
       }
       renderizarArquivos();
@@ -315,7 +317,7 @@
       for (const a of novos){
         const ehPdf = /\.pdf$/i.test(a.name) || a.type === 'application/pdf';
         if (!ehPdf){ problemas.push(`"${a.name}" não é PDF.`); continue; }
-        if (a.size > LIMITE_PDF){ problemas.push(`"${a.name}" passa de 4 MB (${tamanhoBR(a.size)}).`); continue; }
+        if (a.size > LIMITE_PDF){ problemas.push(`"${a.name}" é grande demais (${tamanhoBR(a.size)}; o máximo é 100 MB).`); continue; }
         if (a.size === 0){ problemas.push(`"${a.name}" está vazio.`); continue; }
         if (arquivosEscolhidos.some(x => x.name === a.name && x.size === a.size)) continue;
         arquivosEscolhidos.push(a);
@@ -360,7 +362,44 @@
     });
   }
 
-  function enviarPdf(url, arquivo, aoProgredir){
+  // Envia um PDF para uma guia nova ({ nova:{tipo,numero,data} }) ou para
+  // uma guia de honorário existente ({ guia:id, pasta }). Devolve
+  // { guia_id, competencia }. Em produção o arquivo vai direto para o
+  // armazenamento; no modo local passa pelo servidor.
+  async function enviarArquivo(destino, arquivo, aoProgredir){
+    if (!estado.direto){
+      const q = destino.nova
+        ? new URLSearchParams({ acao: 'nova-guia', ...destino.nova, nome: arquivo.name })
+        : new URLSearchParams({ guia: destino.guia, nome: arquivo.name });
+      return enviarPdfPeloServidor(`/api/arquivos?${q}`, arquivo, aoProgredir);
+    }
+    const pasta = destino.nova ? `${destino.nova.data.slice(0, 7)}/${destino.nova.tipo}-${destino.nova.numero}` : (destino.pasta || 'anexos');
+    const caminho = `clinica-${estado.usuario.clinica_id}/${pasta}-${Date.now()}.pdf`.replace(/[^A-Za-z0-9/._-]/g, '_');
+    let r;
+    try {
+      r = await VercelBlob.upload(caminho, arquivo, {
+        access: 'private', handleUploadUrl: '/api/upload', contentType: 'application/pdf',
+        multipart: arquivo.size > 20 * 1024 * 1024,
+        onUploadProgress: p => aoProgredir((p.percentage || 0) / 100),
+      });
+    } catch (e){
+      console.error('upload direto:', e);
+      const msg = String(e && e.message || '');
+      if (/401|session|sess/i.test(msg)){ estado.usuario = null; mostrarLogin('Sua sessão terminou. Entre de novo.'); }
+      throw new Error('Não foi possível enviar o PDF. Confira a internet e tente de novo.');
+    }
+    const corpo = { chave: r.pathname, nome: arquivo.name, tamanho: arquivo.size, ...(destino.nova ? { nova: destino.nova } : { guia: destino.guia }) };
+    return api('/api/arquivos?acao=registrar', { method: 'POST', body: JSON.stringify(corpo) });
+  }
+
+  // Conferência rápida antes de subir (envio direto): número repetido,
+  // data errada, guia sem espaço — avisa antes de gastar o upload.
+  async function conferirDestino(destino){
+    if (!estado.direto) return;
+    await api('/api/arquivos?acao=conferir', { method: 'POST', body: JSON.stringify(destino.nova ? { nova: destino.nova } : { guia: destino.guia }) });
+  }
+
+  function enviarPdfPeloServidor(url, arquivo, aoProgredir){
     return new Promise((resolve, reject) => {
       const x = new XMLHttpRequest();
       x.open('POST', url);
@@ -397,13 +436,14 @@
 
     let guiaId = null, competencia = null, enviados = 0;
     try {
-      const q = new URLSearchParams({ acao: 'nova-guia', tipo, numero, data, nome: arquivos[0].name });
+      const nova = { tipo, numero, data };
+      await conferirDestino({ nova });
       progresso(0, 0);
-      const r = await enviarPdf(`/api/arquivos?${q}`, arquivos[0], p => progresso(0, p));
+      const r = await enviarArquivo({ nova }, arquivos[0], p => progresso(0, p));
       guiaId = r.guia_id; competencia = r.competencia; enviados = 1;
       for (let i = 1; i < total; i++){
         progresso(i, 0);
-        await enviarPdf(`/api/arquivos?${new URLSearchParams({ guia: guiaId, nome: arquivos[i].name })}`, arquivos[i], p => progresso(i, p));
+        await enviarArquivo({ guia: guiaId, pasta: `${competencia}/${tipo}-${numero}` }, arquivos[i], p => progresso(i, p));
         enviados++;
       }
       aviso(`Guia ${numero} enviada${total > 1 ? ` com ${total} PDFs` : ''} — ${mesNome(competencia)}.`);
@@ -678,12 +718,13 @@
       const arquivos = Array.from(input.files).filter(a => /\.pdf$/i.test(a.name) || a.type === 'application/pdf');
       if (!arquivos.length) return aviso('Escolha arquivos PDF.', true);
       const grande = arquivos.find(a => a.size > LIMITE_PDF);
-      if (grande) return aviso(`"${grande.name}" passa de 4 MB.`, true);
+      if (grande) return aviso(`"${grande.name}" é grande demais (máximo 100 MB).`, true);
       if (g.anexos.length + arquivos.length > MAX_ANEXOS) return aviso(`A guia ficaria com mais de ${MAX_ANEXOS} PDFs.`, true);
       let n = 0;
       try {
+        await conferirDestino({ guia: guiaId });
         for (const a of arquivos){
-          await enviarPdf(`/api/arquivos?${new URLSearchParams({ guia: guiaId, nome: a.name })}`, a, () => {});
+          await enviarArquivo({ guia: guiaId, pasta: `${g.competencia}/${g.tipo}-${g.numero}` }, a, () => {});
           n++;
         }
         aviso(`${n} PDF${n > 1 ? 's anexados' : ' anexado'} à guia ${g.numero}.`);

@@ -13,7 +13,7 @@ module.exports = L.rota(async (req, res) => {
   const db = await L.prepararBanco();
 
   if (req.method === 'GET' && acao === 'eu'){
-    return L.responder(res, 200, { usuario: await L.usuarioDaSessao(req) });
+    return L.responder(res, 200, { usuario: await L.usuarioDaSessao(req), direto: L.uploadDireto() });
   }
 
   if (req.method !== 'POST') return L.responder(res, 405, { erro: 'Método não permitido.' });
@@ -56,7 +56,7 @@ module.exports = L.rota(async (req, res) => {
 
     await db.query(`DELETE FROM tentativas_login WHERE login = $1 OR quando < now() - interval '1 day'`, [login]);
     await L.abrirSessao(req, res, u.id);
-    return L.responder(res, 200, { usuario: await usuarioPorId(db, u.id) });
+    return L.responder(res, 200, { usuario: await usuarioPorId(db, u.id), direto: L.uploadDireto() });
   }
 
   if (acao === 'sair'){

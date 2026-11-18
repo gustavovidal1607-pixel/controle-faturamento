@@ -1,9 +1,17 @@
-// PDFs das guias. O corpo da requisição é o próprio PDF (um por vez).
-//   POST   /api/arquivos?acao=nova-guia&tipo=consulta|honorario&numero=..&data=AAAA-MM-DD&nome=..
-//          -> cria a guia já com o primeiro PDF (guia nunca fica sem anexo)
-//   POST   /api/arquivos?guia=ID&nome=..   -> mais um PDF numa guia de honorário
-//   GET    /api/arquivos?id=ANEXO[&baixar=1] -> abre/baixa o PDF
-//   DELETE /api/arquivos?id=ANEXO          -> tira um PDF de honorário que tem mais de um
+// PDFs das guias.
+//
+// Envio direto (produção, Vercel Blob): o navegador pede a conferência,
+// sobe o PDF direto para o Blob (token de /api/upload) e depois registra:
+//   POST /api/arquivos?acao=conferir   JSON { nova:{tipo,numero,data} } ou { guia:ID }
+//   POST /api/arquivos?acao=registrar  JSON { chave, nome, tamanho, nova:{...} } ou { chave, nome, tamanho, guia:ID }
+//
+// Envio pelo servidor (modo local, sem Blob): o corpo é o próprio PDF.
+//   POST /api/arquivos?acao=nova-guia&tipo=..&numero=..&data=AAAA-MM-DD&nome=..
+//   POST /api/arquivos?guia=ID&nome=..
+//
+// Comum:
+//   GET    /api/arquivos?id=ANEXO[&baixar=1]  -> abre/baixa o PDF
+//   DELETE /api/arquivos?id=ANEXO             -> tira um PDF de honorário que tem mais de um
 
 const L = require('./_lib');
 
@@ -12,66 +20,63 @@ module.exports = L.rota(async (req, res) => {
   if (!u) return;
   const db = await L.prepararBanco();
   const p = L.parametros(req);
+  const acao = p.get('acao');
 
   if (req.method === 'POST'){
     if (u.perfil !== 'recepcao') return L.responder(res, 403, { erro: 'Só a recepção anexa guias.' });
 
+    // ---- conferência antes de subir o PDF (envio direto)
+    if (acao === 'conferir'){
+      const corpo = await L.lerJson(req);
+      const r = await conferirDestino(db, u, corpo);
+      if (r.erro) return L.responder(res, r.status, { erro: r.erro });
+      return L.responder(res, 200, { ok: true });
+    }
+
+    // ---- registro de um PDF que já está no Blob (envio direto)
+    if (acao === 'registrar'){
+      if (!L.uploadDireto()) return L.responder(res, 400, { erro: 'O envio direto não está ativo neste ambiente.' });
+      const corpo = await L.lerJson(req);
+      const chave = String(corpo.chave || '');
+      if (!chave.startsWith(`clinica-${u.clinica_id}/`) || chave.includes('..')) return L.responder(res, 400, { erro: 'Arquivo inválido.' });
+      const info = await L.infoPdf(chave);
+      if (!info) return L.responder(res, 400, { erro: 'O PDF não chegou ao armazenamento. Tente enviar de novo.' });
+      const r = await conferirDestino(db, u, corpo);
+      if (r.erro){
+        try { await L.apagarPdfs([chave]); } catch {}
+        return L.responder(res, r.status, { erro: r.erro });
+      }
+      const nome = limparNome(corpo.nome);
+      try {
+        const saida = await salvar(db, u, r, { chave, nome, tamanho: info.size });
+        return L.responder(res, 201, saida);
+      } catch (e){
+        try { await L.apagarPdfs([chave]); } catch {}
+        if (e && e.code === '23505') return L.responder(res, 409, { erro: (await guiaRepetida(db, u.clinica_id, r.nova.tipo, r.nova.numero)) || 'Essa guia já foi enviada.' });
+        throw e;
+      }
+    }
+
+    // ---- envio pelo servidor (modo local): o corpo é o PDF
     let pdf;
     try { pdf = await L.lerCorpo(req, L.LIMITE_PDF); }
     catch (e){
-      if (e.codigo === 'GRANDE') return L.responder(res, 413, { erro: 'O arquivo passa de 4 MB. Escaneie com resolução menor (200 dpi, preto e branco) e tente de novo.' });
+      if (e.codigo === 'GRANDE') return L.responder(res, 413, { erro: 'O arquivo é grande demais para este caminho de envio. Atualize a página e tente de novo.' });
       throw e;
     }
     if (!L.ehPdf(pdf)) return L.responder(res, 400, { erro: 'O arquivo não é um PDF. Anexe a guia escaneada em PDF.' });
     const nome = limparNome(p.get('nome'));
-
-    // ---- guia nova (primeiro PDF)
-    if (p.get('acao') === 'nova-guia'){
-      const tipo = p.get('tipo');
-      if (tipo !== 'consulta' && tipo !== 'honorario') return L.responder(res, 400, { erro: 'Escolha se a guia é de consulta ou de honorário.' });
-      const numero = limparNumero(p.get('numero'));
-      if (!numero) return L.responder(res, 400, { erro: 'Digite o número da guia (só números e letras, até 30 caracteres).' });
-      const data = p.get('data') || '';
-      const erroData = conferirData(data);
-      if (erroData) return L.responder(res, 400, { erro: erroData });
-
-      const repetida = await guiaRepetida(db, u.clinica_id, tipo, numero);
-      if (repetida) return L.responder(res, 409, { erro: repetida });
-
-      let guia;
-      try {
-        [guia] = await db.query(
-          `INSERT INTO guias (clinica_id, tipo, numero, data_atendimento, competencia, enviado_por)
-           VALUES ($1, $2, $3, $4::date, $5, $6) RETURNING id`,
-          [u.clinica_id, tipo, numero, data, data.slice(0, 7), u.id]
-        );
-      } catch (e){
-        if (e && e.code === '23505') return L.responder(res, 409, { erro: (await guiaRepetida(db, u.clinica_id, tipo, numero)) || 'Essa guia já foi enviada.' });
-        throw e;
-      }
-
-      try {
-        await gravarAnexo(db, u.clinica_id, guia.id, data.slice(0, 7), tipo, numero, 1, nome, pdf);
-      } catch (e){
-        await db.query(`DELETE FROM guias WHERE id = $1`, [guia.id]);
-        throw e;
-      }
-      return L.responder(res, 201, { ok: true, guia_id: guia.id, competencia: data.slice(0, 7) });
+    const destino = acao === 'nova-guia'
+      ? { nova: { tipo: p.get('tipo'), numero: p.get('numero'), data: p.get('data') } }
+      : { guia: p.get('guia') };
+    const r = await conferirDestino(db, u, destino);
+    if (r.erro) return L.responder(res, r.status, { erro: r.erro });
+    try {
+      return L.responder(res, 201, await salvar(db, u, r, { pdf, nome }));
+    } catch (e){
+      if (e && e.code === '23505') return L.responder(res, 409, { erro: (await guiaRepetida(db, u.clinica_id, r.nova.tipo, r.nova.numero)) || 'Essa guia já foi enviada.' });
+      throw e;
     }
-
-    // ---- mais um PDF numa guia de honorário
-    const guiaId = Number(p.get('guia'));
-    if (!Number.isInteger(guiaId) || guiaId <= 0) return L.responder(res, 400, { erro: 'Guia inválida.' });
-    const [guia] = await db.query(
-      `SELECT g.id, g.tipo, g.numero, g.competencia, (SELECT count(*)::int FROM anexos a WHERE a.guia_id = g.id) AS qtd
-         FROM guias g WHERE g.id = $1 AND g.clinica_id = $2 AND g.excluido_em IS NULL`,
-      [guiaId, u.clinica_id]
-    );
-    if (!guia) return L.responder(res, 404, { erro: 'Essa guia não existe mais ou foi excluída.' });
-    if (guia.tipo !== 'honorario' && guia.qtd >= 1) return L.responder(res, 400, { erro: 'Guia de consulta leva só um PDF. Se o PDF está errado, exclua a guia e envie de novo.' });
-    if (guia.qtd >= L.MAX_ANEXOS_HONORARIO) return L.responder(res, 400, { erro: `Essa guia já tem ${L.MAX_ANEXOS_HONORARIO} PDFs, que é o máximo.` });
-    await gravarAnexo(db, u.clinica_id, guia.id, guia.competencia, guia.tipo, guia.numero, guia.qtd + 1, nome, pdf);
-    return L.responder(res, 201, { ok: true, guia_id: guia.id });
   }
 
   if (req.method === 'GET' || req.method === 'DELETE'){
@@ -112,14 +117,68 @@ module.exports = L.rota(async (req, res) => {
   return L.responder(res, 405, { erro: 'Método não permitido.' });
 });
 
-async function gravarAnexo(db, clinicaId, guiaId, competencia, tipo, numero, ordem, nome, pdf){
-  // Sufixo aleatório: tirar e pôr anexo de novo nunca sobrescreve outro PDF.
-  const sufixo = require('crypto').randomBytes(4).toString('hex');
-  const chave = `clinica-${clinicaId}/${competencia}/${tipo}-${numero.replace(/[^A-Za-z0-9-]/g, '_')}-g${guiaId}-${ordem}-${sufixo}.pdf`;
-  const guardado = await L.guardarPdf(chave, pdf);
+// Confere para onde o PDF vai: guia nova (tipo/número/data válidos e não
+// repetida) ou guia de honorário existente com espaço. Devolve
+// { nova:{tipo,numero,data} } | { guia:{...} } ou { erro, status }.
+async function conferirDestino(db, u, corpo){
+  if (corpo.nova){
+    const tipo = corpo.nova.tipo;
+    if (tipo !== 'consulta' && tipo !== 'honorario') return { erro: 'Escolha se a guia é de consulta ou de honorário.', status: 400 };
+    const numero = limparNumero(corpo.nova.numero);
+    if (!numero) return { erro: 'Digite o número da guia (só números e letras, até 30 caracteres).', status: 400 };
+    const data = String(corpo.nova.data || '');
+    const erroData = conferirData(data);
+    if (erroData) return { erro: erroData, status: 400 };
+    const repetida = await guiaRepetida(db, u.clinica_id, tipo, numero);
+    if (repetida) return { erro: repetida, status: 409 };
+    return { nova: { tipo, numero, data } };
+  }
+  const guiaId = Number(corpo.guia);
+  if (!Number.isInteger(guiaId) || guiaId <= 0) return { erro: 'Guia inválida.', status: 400 };
+  const [guia] = await db.query(
+    `SELECT g.id, g.tipo, g.numero, g.competencia, (SELECT count(*)::int FROM anexos a WHERE a.guia_id = g.id) AS qtd
+       FROM guias g WHERE g.id = $1 AND g.clinica_id = $2 AND g.excluido_em IS NULL`,
+    [guiaId, u.clinica_id]
+  );
+  if (!guia) return { erro: 'Essa guia não existe mais ou foi excluída.', status: 404 };
+  if (guia.tipo !== 'honorario' && guia.qtd >= 1) return { erro: 'Guia de consulta leva só um PDF. Se o PDF está errado, exclua a guia e envie de novo.', status: 400 };
+  if (guia.qtd >= L.MAX_ANEXOS_HONORARIO) return { erro: `Essa guia já tem ${L.MAX_ANEXOS_HONORARIO} PDFs, que é o máximo.`, status: 400 };
+  return { guia };
+}
+
+// Grava guia (se nova) + anexo. `arquivo` é { pdf, nome } (sobe daqui) ou
+// { chave, nome, tamanho } (já está no armazenamento).
+async function salvar(db, u, destino, arquivo){
+  if (destino.nova){
+    const { tipo, numero, data } = destino.nova;
+    const [guia] = await db.query(
+      `INSERT INTO guias (clinica_id, tipo, numero, data_atendimento, competencia, enviado_por)
+       VALUES ($1, $2, $3, $4::date, $5, $6) RETURNING id`,
+      [u.clinica_id, tipo, numero, data, data.slice(0, 7), u.id]
+    );
+    try {
+      await gravarAnexo(db, { clinicaId: u.clinica_id, guiaId: guia.id, competencia: data.slice(0, 7), tipo, numero, ordem: 1 }, arquivo);
+    } catch (e){
+      await db.query(`DELETE FROM guias WHERE id = $1`, [guia.id]);
+      throw e;
+    }
+    return { ok: true, guia_id: guia.id, competencia: data.slice(0, 7) };
+  }
+  const g = destino.guia;
+  await gravarAnexo(db, { clinicaId: u.clinica_id, guiaId: g.id, competencia: g.competencia, tipo: g.tipo, numero: g.numero, ordem: g.qtd + 1 }, arquivo);
+  return { ok: true, guia_id: g.id, competencia: g.competencia };
+}
+
+async function gravarAnexo(db, g, arquivo){
+  let chave = arquivo.chave, tamanho = arquivo.tamanho;
+  if (!chave){
+    const sufixo = require('crypto').randomBytes(4).toString('hex');
+    chave = await L.guardarPdf(`clinica-${g.clinicaId}/${g.competencia}/${g.tipo}-${g.numero.replace(/[^A-Za-z0-9-]/g, '_')}-g${g.guiaId}-${g.ordem}-${sufixo}.pdf`, arquivo.pdf);
+    tamanho = arquivo.pdf.length;
+  }
   await db.query(
     `INSERT INTO anexos (guia_id, nome_original, tamanho, chave) VALUES ($1, $2, $3, $4)`,
-    [guiaId, nome, pdf.length, guardado]
+    [g.guiaId, arquivo.nome, tamanho, chave]
   );
 }
 

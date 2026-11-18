@@ -12,7 +12,10 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 
-const LIMITE_PDF = 4 * 1024 * 1024; // a Vercel recusa requisição acima de 4,5 MB
+// Envio pelo servidor: na Vercel a função não recebe mais que 4,5 MB (por
+// isso lá o PDF vai direto para o Blob); no PC não há esse limite.
+const LIMITE_PDF = process.env.BLOB_READ_WRITE_TOKEN ? 4 * 1024 * 1024 : 300 * 1024 * 1024;
+const LIMITE_PDF_DIRETO = 100 * 1024 * 1024; // teto de segurança do envio direto
 const MAX_ANEXOS_HONORARIO = 10;
 const HORAS_SESSAO = 12;
 const PASTA_LOCAL = path.join(__dirname, '..', 'dados-local');
@@ -290,6 +293,17 @@ async function lerPdf(chave){
   return fs.existsSync(origem) ? fs.readFileSync(origem) : null;
 }
 
+// Confere se o PDF existe no armazenamento e devolve { size }.
+async function infoPdf(chave){
+  if (usaBlob()){
+    const { head } = require('@vercel/blob');
+    try { const r = await head(chave); return r ? { size: r.size } : null; }
+    catch { return null; }
+  }
+  const origem = path.join(PASTA_LOCAL, 'arquivos', chave);
+  return fs.existsSync(origem) ? { size: fs.statSync(origem).size } : null;
+}
+
 async function apagarPdfs(chaves){
   if (!chaves.length) return;
   if (usaBlob()){
@@ -314,9 +328,10 @@ function hojeBrasil(){
 }
 
 module.exports = {
-  LIMITE_PDF, MAX_ANEXOS_HONORARIO,
+  LIMITE_PDF, LIMITE_PDF_DIRETO, MAX_ANEXOS_HONORARIO,
   prepararBanco, hashSenha, conferirSenha, normalizarLogin,
   abrirSessao, fecharSessao, usuarioDaSessao, exigirUsuario,
   parametros, lerCorpo, lerJson, responder, rota,
-  guardarPdf, lerPdf, apagarPdfs, ehPdf, hojeBrasil,
+  guardarPdf, lerPdf, infoPdf, apagarPdfs, ehPdf, hojeBrasil,
+  uploadDireto: usaBlob,
 };

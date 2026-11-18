@@ -31,7 +31,12 @@ Abre em http://localhost:3000. Sem variáveis de ambiente usa um banco embutido 
 4. Cadastrar `ADMIN_LOGIN`, `ADMIN_NOME` e `ADMIN_SENHA` (ver `.env.example`) — é o primeiro login da equipe; as tabelas são criadas sozinhas no primeiro acesso.
 5. Deploy. Depois: entrar como *Equipe Faturas Med* → **Clínicas e acessos** → cadastrar a clínica e criar o usuário da recepção (o sistema mostra usuário e senha para passar à clínica).
 
-Limites: PDF até 4 MB cada (limite de requisição da Vercel), 10 PDFs por guia de honorário, sessão de 12 horas.
+Limites: 10 PDFs por guia de honorário, sessão de 12 horas, PDF até 100 MB (teto de segurança). Em produção o PDF vai do navegador **direto para o Blob** (`js/vendor/blob-client.js`, token emitido por `api/upload.js`), porque uma função da Vercel só aceita 4,5 MB de requisição; depois o navegador registra a guia em `/api/arquivos?acao=registrar`. No modo local o PDF passa pelo servidor.
+
+Para regenerar `js/vendor/blob-client.js` depois de atualizar `@vercel/blob`:
+```
+npx esbuild node_modules/@vercel/blob/dist/client.js --bundle --platform=browser --format=iife --global-name=VercelBlob --minify --outfile=js/vendor/blob-client.js
+```
 
 ## Estrutura
 
