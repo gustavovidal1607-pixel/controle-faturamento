@@ -134,17 +134,27 @@ input:disabled,select:disabled{background:var(--papel); color:var(--cinza-claro)
 
 /* ------------------------------------------------------------------ entrada */
 .tela-login{
+  position:relative; overflow:hidden; background:var(--tinta);
   min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  padding:40px 16px; gap:28px; animation:entra .5s ease both;
+  padding:40px 16px; gap:22px;
 }
-@keyframes entra{from{opacity:0; transform:translateY(10px);}}
-.login-logo{width:min(300px, 70vw); height:auto;}
+.login-fundo{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 40%; filter:saturate(.6);}
+.login-veu{
+  position:absolute; inset:0;
+  background:
+    radial-gradient(ellipse at 50% 55%, rgba(13,36,64,.25), rgba(13,36,64,.78) 70%),
+    linear-gradient(180deg, rgba(11,96,181,.45), rgba(13,36,64,.6));
+}
+.login-cartao, .login-rodape{position:relative; z-index:1; animation:entra .6s ease both;}
+@keyframes entra{from{opacity:0; transform:translateY(12px);}}
+.login-logo{display:block; width:min(250px, 64vw); height:auto; margin:4px auto 22px;}
 .login-cartao{
-  width:100%; max-width:400px; background:#fff; border-radius:var(--raio); box-shadow:var(--sombra);
-  padding:28px 28px 30px; position:relative; overflow:hidden;
+  width:100%; max-width:420px; background:rgba(255,255,255,.96); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  border-radius:16px; box-shadow:0 30px 80px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.4) inset;
+  padding:30px 30px 32px; overflow:hidden;
 }
 .login-cartao::before{content:""; position:absolute; inset:0 0 auto 0; height:4px; background:linear-gradient(90deg, var(--ciano), var(--menta));}
-.login-cartao h1{margin:0 0 18px; font:600 21px/1.25 var(--fonte-titulo); color:var(--azul); letter-spacing:-.01em;}
+.login-cartao h1{margin:0 0 18px; font:600 21px/1.25 var(--fonte-titulo); color:var(--azul); letter-spacing:-.01em; text-align:center;}
 .seletor-perfil{display:grid; grid-template-columns:1fr 1fr; background:var(--papel); border-radius:var(--raio-p); padding:4px; gap:4px;}
 .seletor-perfil button{
   border:none; background:transparent; border-radius:6px; padding:9px 8px; cursor:pointer;
@@ -154,7 +164,7 @@ input:disabled,select:disabled{background:var(--papel); color:var(--cinza-claro)
 .login-dica{margin:14px 0 18px; color:var(--cinza); font-size:14px;}
 #form-login{display:flex; flex-direction:column; gap:14px;}
 #form-login .botao{margin-top:4px;}
-.login-rodape{margin:0; font-size:13px; color:var(--cinza);}
+.login-rodape{margin:0; font-size:13px; color:rgba(255,255,255,.8); text-shadow:0 1px 8px rgba(0,0,0,.4);}
 
 /* ------------------------------------------------------------------ topo */
 .topo{
