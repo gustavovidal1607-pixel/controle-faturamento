@@ -124,7 +124,7 @@
     perfilLogin = p;
     $$('.seletor-perfil button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.perfil === p)));
     $('#login-dica').textContent = p === 'recepcao'
-      ? 'Entre com o usuário da recepção da Facial Care para anexar as guias.'
+      ? 'Entre com o usuário da recepção para anexar as guias.'
       : 'Acesso da equipe FaturasMed: ver e baixar as guias para faturar.';
   }
 
@@ -936,7 +936,7 @@
 
   function mostrarCredenciais(nome, login, senha, perfil){
     const dlg = $('#dialogo');
-    const texto = `Controle de Faturamento — Faturas Med\n${location.origin}\nEntrar como: ${perfil === 'faturas' ? 'FaturasMed' : 'Facial Care'}\nUsuário: ${login}\nSenha: ${senha}`;
+    const texto = `Controle de Faturamento — Faturas Med\n${location.origin}\nEntrar como: ${perfil === 'faturas' ? 'FaturasMed' : 'Prestador'}\nUsuário: ${login}\nSenha: ${senha}`;
     dlg.innerHTML = `
       <form method="dialog">
         <h2>Acesso de ${h(nome)}</h2>
