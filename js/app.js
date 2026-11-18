@@ -44,7 +44,8 @@
   }
   const tamanhoBR = n => n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
   const tipoNome = t => t === 'consulta' ? 'Consulta' : 'Honorário';
-  const nomePdf = (g, i, total) => `${g.convenio ? slug(g.convenio) + '_' : ''}${g.tipo === 'consulta' ? 'CONSULTA' : 'HONORARIO'}_${g.numero}_${dataBR(g.data_atendimento).replace(/\//g, '-')}${total > 1 ? '_' + (i + 1) : ''}.pdf`;
+  const docDe = (a, i) => a.doc || (i + 1);
+  const nomePdf = (g, a, i) => `${g.numero}_ANEXO_DOC${docDe(a, i)}.pdf`;
 
   function aviso(texto, erro){
     const el = document.createElement('div');
@@ -348,8 +349,11 @@
     }
 
     function renderizarArquivos(){
+      const numero = f.numero.value.trim().replace(/\s+/g, '').toUpperCase();
       $('#lista-arquivos').innerHTML = arquivosEscolhidos.map((a, i) => `
-        <li><span class="pdf-ico">PDF</span><span class="nome" title="${h(a.name)}">${h(a.name)}</span><span class="tam">${tamanhoBR(a.size)}</span>
+        <li><span class="pdf-ico">PDF</span>
+        <span class="nome" title="${h(a.name)}">${numero ? `<strong>${h(numero)}_ANEXO_DOC${i + 1}.pdf</strong><small>${h(a.name)}</small>` : h(a.name)}</span>
+        <span class="tam">${tamanhoBR(a.size)}</span>
         <button type="button" data-tirar="${i}" aria-label="Tirar ${h(a.name)}">×</button></li>`).join('');
     }
 
@@ -646,8 +650,8 @@
             : `<span class="situacao nova">${faturas ? 'Nova' : 'Enviada'}</span>`;
           const pdfs = g.anexos.map((a, i) => `
             <span class="pdf-grupo">
-              <a class="pdf" href="/api/arquivos?id=${a.id}" target="_blank" rel="noopener" title="${h(a.nome)} · ${tamanhoBR(a.tamanho)}" data-abrir="${g.id}">PDF${g.anexos.length > 1 ? ' ' + (i + 1) : ''}</a>
-              ${!faturas && g.tipo === 'honorario' && g.anexos.length > 1 ? `<button type="button" class="tirar" data-tirar-anexo="${a.id}" title="Tirar este PDF" aria-label="Tirar PDF ${i + 1}">×</button>` : ''}
+              <a class="pdf" href="/api/arquivos?id=${a.id}" target="_blank" rel="noopener" title="${h(nomePdf(g, a, i))} · ${tamanhoBR(a.tamanho)}" data-abrir="${g.id}">DOC ${docDe(a, i)}</a>
+              ${!faturas && g.tipo === 'honorario' && g.anexos.length > 1 ? `<button type="button" class="tirar" data-tirar-anexo="${a.id}" title="Tirar este PDF" aria-label="Tirar DOC ${docDe(a, i)}">×</button>` : ''}
             </span>`).join('');
           const acoes = excluida ? '' : faturas
             ? `<a class="link" href="/api/arquivos?id=${g.anexos[0]?.id}&baixar=1" data-abrir="${g.id}">Baixar</a>`
@@ -721,7 +725,7 @@
     const g = estado.guias.find(x => x.anexos.some(a => a.id === anexoId));
     if (!g) return;
     const i = g.anexos.findIndex(a => a.id === anexoId);
-    const ok = await confirmar({ titulo: 'Tirar este PDF?', texto: `O PDF ${i + 1} (${h(g.anexos[i].nome)}) sai da guia <strong>${h(g.numero)}</strong>. Os outros ficam.`, botao: 'Tirar PDF', perigo: true });
+    const ok = await confirmar({ titulo: 'Tirar este PDF?', texto: `O arquivo <strong>${h(nomePdf(g, g.anexos[i], i))}</strong> sai da guia ${h(g.numero)}. Os outros ficam.`, botao: 'Tirar PDF', perigo: true });
     if (!ok) return;
     try {
       await api(`/api/arquivos?id=${anexoId}`, { method: 'DELETE' });
@@ -785,7 +789,7 @@
           const r = await fetch(`/api/arquivos?id=${g.anexos[i].id}`, { credentials: 'same-origin' });
           if (!r.ok) throw new Error(`Não deu para baixar o PDF da guia ${g.numero}.`);
           const pasta = umaClinica ? '' : g.clinica_nome.replace(/[\\/:*?"<>|]/g, '-') + '/';
-          zip.adicionar(`${pasta}${g.convenio ? slug(g.convenio) + '/' : ''}${g.tipo === 'consulta' ? 'CONSULTAS' : 'HONORARIOS'}/${nomePdf(g, i, g.anexos.length)}`, new Uint8Array(await r.arrayBuffer()));
+          zip.adicionar(`${pasta}${g.convenio ? slug(g.convenio) + '/' : ''}${g.tipo === 'consulta' ? 'CONSULTAS' : 'HONORARIOS'}/${nomePdf(g, g.anexos[i], i)}`, new Uint8Array(await r.arrayBuffer()));
           if (!g.baixado_em) g.baixado_em = new Date().toISOString();
         }
       }

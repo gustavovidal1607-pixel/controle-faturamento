@@ -44,7 +44,7 @@ module.exports = L.rota(async (req, res) => {
               g.competencia, g.criado_em, g.baixado_em, g.excluido_em,
               g.clinica_id, c.nome AS clinica_nome,
               ue.nome AS enviado_por_nome, ux.nome AS excluido_por_nome,
-              COALESCE((SELECT json_agg(json_build_object('id', a.id, 'nome', a.nome_original, 'tamanho', a.tamanho) ORDER BY a.id)
+              COALESCE((SELECT json_agg(json_build_object('id', a.id, 'nome', a.nome_original, 'tamanho', a.tamanho, 'doc', a.doc) ORDER BY a.id)
                           FROM anexos a WHERE a.guia_id = g.id), '[]'::json) AS anexos
          FROM guias g
          JOIN clinicas c ON c.id = g.clinica_id

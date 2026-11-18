@@ -83,9 +83,8 @@ module.exports = L.rota(async (req, res) => {
     const id = Number(p.get('id'));
     if (!Number.isInteger(id) || id <= 0) return L.responder(res, 400, { erro: 'Anexo inválido.' });
     const [anexo] = await db.query(
-      `SELECT a.id, a.chave, a.guia_id, g.tipo, g.numero, g.convenio, to_char(g.data_atendimento, 'DD-MM-YYYY') AS data_br,
-              (SELECT count(*)::int FROM anexos x WHERE x.guia_id = g.id) AS qtd,
-              (SELECT count(*)::int FROM anexos x WHERE x.guia_id = g.id AND x.id <= a.id) AS ordem
+      `SELECT a.id, a.chave, a.guia_id, a.nome_original, a.doc, g.tipo, g.numero, g.convenio,
+              (SELECT count(*)::int FROM anexos x WHERE x.guia_id = g.id) AS qtd
          FROM anexos a JOIN guias g ON g.id = a.guia_id
         WHERE a.id = $1 AND g.excluido_em IS NULL AND ($2::int IS NULL OR g.clinica_id = $2)`,
       [id, u.perfil === 'recepcao' ? u.clinica_id : null]
@@ -105,7 +104,7 @@ module.exports = L.rota(async (req, res) => {
     // Equipe Faturas Med abriu/baixou: a guia deixa de ser "nova".
     if (u.perfil === 'faturas') await db.query(`UPDATE guias SET baixado_em = now() WHERE id = $1 AND baixado_em IS NULL`, [anexo.guia_id]);
 
-    const nomeArquivo = `${anexo.convenio ? L.slug(anexo.convenio) + '_' : ''}${anexo.tipo === 'consulta' ? 'CONSULTA' : 'HONORARIO'}_${anexo.numero}_${anexo.data_br}${anexo.qtd > 1 ? '_' + anexo.ordem : ''}.pdf`;
+    const nomeArquivo = anexo.doc ? `${anexo.numero}_ANEXO_DOC${anexo.doc}.pdf` : String(anexo.nome_original || 'guia.pdf').replace(/[^A-Za-z0-9._-]/g, '_');
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', conteudo.length);
@@ -172,17 +171,23 @@ async function salvar(db, u, destino, arquivo){
   return { ok: true, guia_id: g.id, competencia: g.competencia };
 }
 
+// O arquivo é renomeado para <numero>_ANEXO_DOC<n>.pdf (n = próximo número
+// livre na guia — se o DOC1 for retirado, o próximo vira DOC3, nunca repete).
 async function gravarAnexo(db, g, arquivo){
+  const [{ proximo }] = await db.query(`SELECT COALESCE(MAX(doc), 0) + 1 AS proximo FROM anexos WHERE guia_id = $1`, [g.guiaId]);
+  const doc = Number(proximo);
+  const nome = `${g.numero}_ANEXO_DOC${doc}.pdf`;
   let chave = arquivo.chave, tamanho = arquivo.tamanho;
   if (!chave){
     const sufixo = require('crypto').randomBytes(4).toString('hex');
-    chave = await L.guardarPdf(`clinica-${g.clinicaId}/${g.competencia}/${g.tipo}-${g.numero.replace(/[^A-Za-z0-9-]/g, '_')}-g${g.guiaId}-${g.ordem}-${sufixo}.pdf`, arquivo.pdf);
+    chave = await L.guardarPdf(`clinica-${g.clinicaId}/${g.competencia}/${g.numero.replace(/[^A-Za-z0-9-]/g, '_')}_ANEXO_DOC${doc}-g${g.guiaId}-${sufixo}.pdf`, arquivo.pdf);
     tamanho = arquivo.pdf.length;
   }
   await db.query(
-    `INSERT INTO anexos (guia_id, nome_original, tamanho, chave) VALUES ($1, $2, $3, $4)`,
-    [g.guiaId, arquivo.nome, tamanho, chave]
+    `INSERT INTO anexos (guia_id, nome_original, tamanho, chave, doc) VALUES ($1, $2, $3, $4, $5)`,
+    [g.guiaId, nome, tamanho, chave, doc]
   );
+  return nome;
 }
 
 async function guiaRepetida(db, clinicaId, { convenio, tipo, numero }){

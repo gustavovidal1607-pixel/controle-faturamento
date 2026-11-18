@@ -111,6 +111,8 @@ function prepararBanco(){
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
     await db.query(`CREATE INDEX IF NOT EXISTS anexos_por_guia ON anexos (guia_id)`);
+    // Número do documento dentro da guia: o arquivo vira <numero>_ANEXO_DOC<doc>.pdf
+    await db.query(`ALTER TABLE anexos ADD COLUMN IF NOT EXISTS doc INT`);
 
     // Primeiro acesso da equipe: se ainda não existe ninguém da Faturas,
     // cria a conta com ADMIN_LOGIN / ADMIN_SENHA (variáveis de ambiente).
