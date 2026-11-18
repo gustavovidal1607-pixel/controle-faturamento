@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Controle de Faturamento · Faturas Med</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+  <link rel="apple-touch-icon" href="img/favicon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+  <!-- Abertura: a logo da Faturas Med se monta (barras sobem, seta passa) -->
+  <div id="abertura" class="abertura" aria-hidden="true">
+    <div id="abertura-logo" class="abertura-logo"></div>
+  </div>
+
+  <!-- Entrada -->
+  <main id="tela-login" class="tela-login" hidden>
+    <img class="login-logo" src="img/logo.svg" alt="Faturas Med — Faturamento Médico e Hospitalar">
+    <section class="login-cartao" aria-labelledby="login-titulo">
+      <h1 id="login-titulo">Controle de Faturamento</h1>
+      <div class="seletor-perfil" role="radiogroup" aria-label="Quem está entrando">
+        <button type="button" role="radio" data-perfil="recepcao" aria-checked="true">Recepção da clínica</button>
+        <button type="button" role="radio" data-perfil="faturas" aria-checked="false">Equipe Faturas Med</button>
+      </div>
+      <p id="login-dica" class="login-dica">Entre com o usuário da recepção para anexar as guias.</p>
+      <form id="form-login" novalidate>
+        <label class="campo">
+          <span>Usuário</span>
+          <input id="login-usuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        </label>
+        <label class="campo">
+          <span>Senha</span>
+          <input id="login-senha" name="senha" type="password" autocomplete="current-password" required>
+        </label>
+        <p id="login-erro" class="erro" role="alert"></p>
+        <button class="botao primario largo" type="submit">Entrar</button>
+      </form>
+    </section>
+    <p class="login-rodape">Dúvidas com o acesso? Fale com a equipe Faturas Med.</p>
+  </main>
+
+  <!-- Sistema -->
+  <div id="app" hidden>
+    <header class="topo">
+      <div class="topo-marca">
+        <img class="topo-logo" src="img/logo.svg" alt="Faturas Med">
+        <div class="topo-titulo">
+          <span>Controle de Faturamento</span>
+          <strong id="topo-local"></strong>
+        </div>
+      </div>
+      <nav id="topo-abas" class="topo-abas" hidden>
+        <button type="button" data-aba="guias" aria-current="page">Guias</button>
+        <button type="button" data-aba="acessos">Clínicas e acessos</button>
+      </nav>
+      <div class="topo-usuario">
+        <span id="topo-nome" class="topo-nome"></span>
+        <button id="btn-senha" type="button" class="link">Trocar senha</button>
+        <button id="btn-sair" type="button" class="botao fantasma pequeno">Sair</button>
+      </div>
+    </header>
+    <main id="conteudo" class="conteudo"></main>
+  </div>
+
+  <div id="avisos" class="avisos" aria-live="polite"></div>
+  <dialog id="dialogo" class="dialogo"></dialog>
+
+  <script src="js/zip.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
