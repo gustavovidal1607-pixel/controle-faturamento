@@ -92,7 +92,7 @@
     const tela = $('#abertura');
     requestAnimationFrame(() => tela.classList.add('animar'));
     const reduzido = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const espera = new Promise(r => setTimeout(r, reduzido ? 300 : 1700));
+    const espera = new Promise(r => setTimeout(r, reduzido ? 300 : 3600));
     let usuario = null;
     try { usuario = (await api('/api/auth?acao=eu')).usuario; } catch {}
     await espera;
@@ -116,8 +116,8 @@
     perfilLogin = p;
     $$('.seletor-perfil button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.perfil === p)));
     $('#login-dica').textContent = p === 'recepcao'
-      ? 'Entre com o usuário da recepção para anexar as guias.'
-      : 'Acesso da equipe: ver e baixar as guias de todas as clínicas.';
+      ? 'Entre com o usuário da recepção da Facial Care para anexar as guias.'
+      : 'Acesso da equipe FaturasMed: ver e baixar as guias para faturar.';
   }
 
   $$('.seletor-perfil button').forEach(b => b.addEventListener('click', () => definirPerfilLogin(b.dataset.perfil)));
@@ -226,10 +226,10 @@
     return `
     <section class="painel anexar" aria-labelledby="anexar-titulo">
       <h2 id="anexar-titulo">Anexar guia</h2>
-      <p class="sub">Uma guia por vez. Ela entra no mês da data do atendimento.</p>
+      <p class="sub">Uma guia por vez.</p>
       <form id="form-anexar" novalidate>
         <fieldset class="passo">
-          <legend><span class="passo-n">1</span> O que é a guia?</legend>
+          <legend><span class="passo-n">1</span> É uma guia de:</legend>
           <div class="tipos">
             <label class="tipo">
               <input type="radio" name="tipo" value="consulta">
@@ -239,7 +239,7 @@
             <label class="tipo">
               <input type="radio" name="tipo" value="honorario">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="14" height="16" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v12"/><path d="M7 11h6M7 15h6"/></svg>
-              <span><strong>Honorário</strong><small>Pode ter vários PDFs</small></span>
+              <span><strong>Honorário</strong><small>Vários PDFs</small></span>
             </label>
           </div>
         </fieldset>
@@ -478,7 +478,7 @@
     const u = estado.usuario;
     const caixa = $('#arquivo');
     caixa.innerHTML = `
-      ${u.perfil === 'recepcao' ? `<div class="arquivo-cabeca"><div><h2>Guias enviadas</h2><p>Organizadas pelo mês do atendimento. Enviou errado? Exclua e envie de novo.</p></div></div>` : ''}
+      ${u.perfil === 'recepcao' ? `<div class="arquivo-cabeca"><h2>Guias enviadas</h2></div>` : ''}
       <div class="abas-mes" role="tablist" aria-label="Meses">
         ${estado.meses.map(m => `
           <button type="button" role="tab" class="aba-mes" data-mes="${m.competencia}" aria-selected="${m.competencia === estado.mes}">
@@ -888,7 +888,7 @@
 
   function mostrarCredenciais(nome, login, senha, perfil){
     const dlg = $('#dialogo');
-    const texto = `Controle de Faturamento — Faturas Med\n${location.origin}\nEntrar como: ${perfil === 'faturas' ? 'Equipe Faturas Med' : 'Recepção da clínica'}\nUsuário: ${login}\nSenha: ${senha}`;
+    const texto = `Controle de Faturamento — Faturas Med\n${location.origin}\nEntrar como: ${perfil === 'faturas' ? 'FaturasMed' : 'Facial Care'}\nUsuário: ${login}\nSenha: ${senha}`;
     dlg.innerHTML = `
       <form method="dialog">
         <h2>Acesso de ${h(nome)}</h2>

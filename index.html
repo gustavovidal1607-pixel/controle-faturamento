@@ -16,7 +16,12 @@
 
   <!-- Abertura: a logo da Faturas Med se monta (barras sobem, seta passa) -->
   <div id="abertura" class="abertura" aria-hidden="true">
-    <div id="abertura-logo" class="abertura-logo"></div>
+    <img class="abertura-foto" src="img/abertura.jpg" alt="">
+    <div class="abertura-veu"></div>
+    <div class="abertura-centro">
+      <div class="abertura-painel"><div id="abertura-logo" class="abertura-logo"></div></div>
+      <p class="abertura-legenda">Controle de Faturamento</p>
+    </div>
   </div>
 
   <!-- Entrada -->
@@ -25,10 +30,10 @@
     <section class="login-cartao" aria-labelledby="login-titulo">
       <h1 id="login-titulo">Controle de Faturamento</h1>
       <div class="seletor-perfil" role="radiogroup" aria-label="Quem está entrando">
-        <button type="button" role="radio" data-perfil="recepcao" aria-checked="true">Recepção da clínica</button>
-        <button type="button" role="radio" data-perfil="faturas" aria-checked="false">Equipe Faturas Med</button>
+        <button type="button" role="radio" data-perfil="recepcao" aria-checked="true">Facial Care</button>
+        <button type="button" role="radio" data-perfil="faturas" aria-checked="false">FaturasMed</button>
       </div>
-      <p id="login-dica" class="login-dica">Entre com o usuário da recepção para anexar as guias.</p>
+      <p id="login-dica" class="login-dica">Entre com o usuário da recepção da Facial Care para anexar as guias.</p>
       <form id="form-login" novalidate>
         <label class="campo">
           <span>Usuário</span>

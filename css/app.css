@@ -72,24 +72,64 @@ input:disabled,select:disabled{background:var(--papel); color:var(--cinza-claro)
 
 /* ------------------------------------------------------------------ abertura (logo) */
 .abertura{
-  position:fixed; inset:0; z-index:1000; background:var(--papel);
+  position:fixed; inset:0; z-index:1000; background:var(--tinta); overflow:hidden;
   display:flex; align-items:center; justify-content:center;
-  transition:opacity .45s ease;
+  transition:opacity .6s ease;
 }
 .abertura.saindo{opacity:0; pointer-events:none;}
-.abertura-logo{width:min(440px, 78vw);}
+.abertura-foto{
+  position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:center 40%;
+  opacity:0; transform:scale(1.1); filter:saturate(.6);
+}
+.abertura.animar .abertura-foto{animation:fotoEntra 1.2s ease-out forwards, fotoZoom 7s linear forwards;}
+.abertura-veu{
+  position:absolute; inset:0;
+  background:
+    radial-gradient(ellipse at 50% 55%, rgba(13,36,64,.25), rgba(13,36,64,.78) 70%),
+    linear-gradient(180deg, rgba(11,96,181,.45), rgba(13,36,64,.6));
+}
+.abertura-centro{position:relative; display:flex; flex-direction:column; align-items:center; gap:22px; padding:16px;}
+.abertura-painel{
+  background:rgba(255,255,255,.94); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  border-radius:20px; padding:clamp(22px, 4vw, 40px) clamp(26px, 5vw, 56px);
+  box-shadow:0 30px 80px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.4) inset;
+  opacity:0; transform:translateY(18px) scale(.97);
+}
+.abertura.animar .abertura-painel{animation:painelEntra .7s cubic-bezier(.2,.8,.2,1) .35s forwards;}
+.abertura-logo{width:min(460px, 74vw);}
 .abertura-logo svg{display:block; width:100%; height:auto; overflow:visible;}
+.abertura-legenda{
+  margin:0; color:#fff; font:500 clamp(13px, 1.6vw, 15px)/1 var(--fonte-titulo); text-transform:uppercase;
+  letter-spacing:.55em; opacity:0; text-shadow:0 2px 12px rgba(0,0,0,.4);
+}
+.abertura.animar .abertura-legenda{animation:legendaEntra 1s ease 2.35s forwards;}
 
+/* a logo se monta: barras sobem, seta passa, letras uma a uma, slogan */
 .abertura.animar .lg-barra{transform-box:fill-box; transform-origin:50% 100%; transform:scaleY(0); animation:sobe .55s cubic-bezier(.2,.8,.2,1) forwards;}
-.abertura.animar .lg-b1{animation-delay:.05s;}
-.abertura.animar .lg-b2{animation-delay:.15s;}
-.abertura.animar .lg-b3{animation-delay:.25s;}
-.abertura.animar .lg-b4{animation-delay:.35s;}
-.abertura.animar .lg-seta{clip-path:inset(0 100% 0 0); animation:passa .5s cubic-bezier(.4,0,.2,1) .55s forwards;}
-.abertura.animar .lg-nome{opacity:0; transform:translateX(-6px); animation:aparece .45s ease .85s forwards;}
-.abertura.animar .lg-slogan{opacity:0; animation:aparece .45s ease 1.05s forwards;}
+.abertura.animar .lg-b1{animation-delay:.75s;}
+.abertura.animar .lg-b2{animation-delay:.85s;}
+.abertura.animar .lg-b3{animation-delay:.95s;}
+.abertura.animar .lg-b4{animation-delay:1.05s;}
+.abertura.animar .lg-seta{clip-path:inset(0 100% 0 0); animation:passa .5s cubic-bezier(.4,0,.2,1) 1.2s forwards;}
+.abertura.animar .lg-letra{transform-box:fill-box; opacity:0; transform:translateY(10px); filter:blur(4px); animation:letra .42s cubic-bezier(.2,.8,.2,1) forwards;}
+.abertura.animar .lg-l1{animation-delay:1.25s;}
+.abertura.animar .lg-l2{animation-delay:1.33s;}
+.abertura.animar .lg-l3{animation-delay:1.41s;}
+.abertura.animar .lg-l4{animation-delay:1.49s;}
+.abertura.animar .lg-l5{animation-delay:1.57s;}
+.abertura.animar .lg-l6{animation-delay:1.65s;}
+.abertura.animar .lg-l7{animation-delay:1.73s;}
+.abertura.animar .lg-l8{animation-delay:1.87s;}
+.abertura.animar .lg-l9{animation-delay:1.95s;}
+.abertura.animar .lg-l10{animation-delay:2.03s;}
+.abertura.animar .lg-slogan{opacity:0; animation:aparece .5s ease 2.3s forwards;}
+@keyframes fotoEntra{to{opacity:1;}}
+@keyframes fotoZoom{from{transform:scale(1.1);} to{transform:scale(1);}}
+@keyframes painelEntra{to{opacity:1; transform:none;}}
+@keyframes legendaEntra{to{opacity:1; letter-spacing:.3em;}}
 @keyframes sobe{to{transform:scaleY(1);}}
 @keyframes passa{to{clip-path:inset(0 0 0 0);}}
+@keyframes letra{to{opacity:1; transform:none; filter:none;}}
 @keyframes aparece{to{opacity:1; transform:none;}}
 
 /* ------------------------------------------------------------------ entrada */
@@ -134,10 +174,10 @@ input:disabled,select:disabled{background:var(--papel); color:var(--cinza-claro)
 .topo-usuario{margin-left:auto; display:flex; align-items:center; gap:14px;}
 .topo-nome{font-weight:600; font-size:14px;}
 
-.conteudo{max-width:1320px; margin:0 auto; padding:24px;}
+.conteudo{max-width:1480px; margin:0 auto; padding:24px 28px;}
 
 /* ------------------------------------------------------------------ mesa da recepção */
-.mesa{display:grid; grid-template-columns:minmax(330px, 400px) 1fr; gap:24px; align-items:start;}
+.mesa{display:grid; grid-template-columns:minmax(340px, 430px) 1fr; gap:28px; align-items:start;}
 .painel{background:#fff; border-radius:var(--raio); box-shadow:var(--sombra); padding:22px;}
 .painel h2{margin:0 0 4px; font:600 18px/1.3 var(--fonte-titulo); color:var(--tinta);}
 .painel .sub{margin:0 0 18px; color:var(--cinza); font-size:13.5px;}
@@ -162,7 +202,7 @@ input:disabled,select:disabled{background:var(--papel); color:var(--cinza-claro)
 .tipo input{position:absolute; opacity:0; pointer-events:none;}
 .tipo svg{flex:0 0 auto; color:var(--cinza-claro); transition:color .15s;}
 .tipo strong{display:block; font:600 15px/1.2 var(--fonte-titulo);}
-.tipo small{display:block; color:var(--cinza); font-size:12px; margin-top:2px;}
+.tipo small{display:block; color:var(--cinza); font-size:12px; margin-top:2px; white-space:nowrap;}
 .tipo:hover{border-color:#B7C6D8;}
 .tipo:has(input:checked){border-color:var(--azul); background:var(--azul-claro); box-shadow:inset 0 0 0 1px var(--azul);}
 .tipo:has(input:checked) svg{color:var(--azul);}
@@ -198,7 +238,7 @@ input:disabled,select:disabled{background:var(--papel); color:var(--cinza-claro)
 .progresso-texto{margin:0; font-size:13px; color:var(--cinza);}
 
 /* ------------------------------------------------------------------ arquivo por mês (abas de pasta) */
-.arquivo-cabeca{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin:0 0 14px;}
+.arquivo-cabeca{display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin:4px 0 12px;}
 .arquivo-cabeca h2{margin:0; font:600 18px/1.3 var(--fonte-titulo);}
 .arquivo-cabeca p{margin:2px 0 0; color:var(--cinza); font-size:13.5px;}
 

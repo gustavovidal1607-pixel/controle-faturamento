@@ -48,8 +48,8 @@ module.exports = L.rota(async (req, res) => {
     if (u.perfil !== perfil){
       return L.responder(res, 409, {
         erro: u.perfil === 'faturas'
-          ? 'Este usuário é da equipe Faturas Med. Escolha "Equipe Faturas Med" acima.'
-          : 'Este usuário é da recepção. Escolha "Recepção da clínica" acima.',
+          ? 'Este usuário é da equipe FaturasMed. Escolha "FaturasMed" acima.'
+          : 'Este usuário é da recepção da clínica. Escolha "Facial Care" acima.',
         perfilCerto: u.perfil,
       });
     }
