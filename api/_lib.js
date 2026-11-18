@@ -16,6 +16,12 @@ const fs = require('fs');
 // isso lá o PDF vai direto para o Blob); no PC não há esse limite.
 const LIMITE_PDF = process.env.BLOB_READ_WRITE_TOKEN ? 4 * 1024 * 1024 : 300 * 1024 * 1024;
 const LIMITE_PDF_DIRETO = 100 * 1024 * 1024; // teto de segurança do envio direto
+const CONVENIOS = ['Bradesco Saúde', 'Bradesco Operadora', 'MedSênior', 'Mediservice'];
+
+// "Bradesco Saúde" -> "BRADESCO-SAUDE" (para nome de arquivo e pasta)
+function slug(texto){
+  return String(texto || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
 const MAX_ANEXOS_HONORARIO = 10;
 const HORAS_SESSAO = 12;
 const PASTA_LOCAL = path.join(__dirname, '..', 'dados-local');
@@ -89,8 +95,12 @@ function prepararBanco(){
       excluido_em TIMESTAMPTZ,
       excluido_por INT REFERENCES usuarios(id)
     )`);
-    await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS guias_numero_unico
-      ON guias (clinica_id, tipo, numero) WHERE excluido_em IS NULL`);
+    // Convênio da guia (Bradesco Saúde, Bradesco Operadora, MedSênior,
+    // Mediservice). O número é único por clínica + convênio + tipo.
+    await db.query(`ALTER TABLE guias ADD COLUMN IF NOT EXISTS convenio TEXT NOT NULL DEFAULT ''`);
+    await db.query(`DROP INDEX IF EXISTS guias_numero_unico`);
+    await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS guias_numero_convenio_unico
+      ON guias (clinica_id, convenio, tipo, numero) WHERE excluido_em IS NULL`);
     await db.query(`CREATE INDEX IF NOT EXISTS guias_por_mes ON guias (clinica_id, competencia)`);
     await db.query(`CREATE TABLE IF NOT EXISTS anexos (
       id SERIAL PRIMARY KEY,
@@ -328,7 +338,7 @@ function hojeBrasil(){
 }
 
 module.exports = {
-  LIMITE_PDF, LIMITE_PDF_DIRETO, MAX_ANEXOS_HONORARIO,
+  LIMITE_PDF, LIMITE_PDF_DIRETO, MAX_ANEXOS_HONORARIO, CONVENIOS, slug,
   prepararBanco, hashSenha, conferirSenha, normalizarLogin,
   abrirSessao, fecharSessao, usuarioDaSessao, exigirUsuario,
   parametros, lerCorpo, lerJson, responder, rota,

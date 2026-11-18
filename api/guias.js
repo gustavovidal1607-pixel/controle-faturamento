@@ -40,7 +40,7 @@ module.exports = L.rota(async (req, res) => {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) return L.responder(res, 400, { erro: 'Mês inválido.' });
     const comExcluidas = u.perfil === 'faturas' && p.get('excluidas') === '1';
     const guias = await db.query(
-      `SELECT g.id, g.tipo, g.numero, to_char(g.data_atendimento, 'YYYY-MM-DD') AS data_atendimento,
+      `SELECT g.id, g.convenio, g.tipo, g.numero, to_char(g.data_atendimento, 'YYYY-MM-DD') AS data_atendimento,
               g.competencia, g.criado_em, g.baixado_em, g.excluido_em,
               g.clinica_id, c.nome AS clinica_nome,
               ue.nome AS enviado_por_nome, ux.nome AS excluido_por_nome,
@@ -56,7 +56,7 @@ module.exports = L.rota(async (req, res) => {
         ORDER BY g.data_atendimento DESC, g.id DESC`,
       [mes, clinica, comExcluidas]
     );
-    return L.responder(res, 200, { guias });
+    return L.responder(res, 200, { guias, convenios: L.CONVENIOS });
   }
 
   if (req.method === 'DELETE'){

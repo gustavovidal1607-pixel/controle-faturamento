@@ -52,7 +52,7 @@ module.exports = L.rota(async (req, res) => {
         return L.responder(res, 201, saida);
       } catch (e){
         try { await L.apagarPdfs([chave]); } catch {}
-        if (e && e.code === '23505') return L.responder(res, 409, { erro: (await guiaRepetida(db, u.clinica_id, r.nova.tipo, r.nova.numero)) || 'Essa guia já foi enviada.' });
+        if (e && e.code === '23505') return L.responder(res, 409, { erro: (await guiaRepetida(db, u.clinica_id, r.nova)) || 'Essa guia já foi enviada.' });
         throw e;
       }
     }
@@ -67,14 +67,14 @@ module.exports = L.rota(async (req, res) => {
     if (!L.ehPdf(pdf)) return L.responder(res, 400, { erro: 'O arquivo não é um PDF. Anexe a guia escaneada em PDF.' });
     const nome = limparNome(p.get('nome'));
     const destino = acao === 'nova-guia'
-      ? { nova: { tipo: p.get('tipo'), numero: p.get('numero'), data: p.get('data') } }
+      ? { nova: { convenio: p.get('convenio'), tipo: p.get('tipo'), numero: p.get('numero'), data: p.get('data') } }
       : { guia: p.get('guia') };
     const r = await conferirDestino(db, u, destino);
     if (r.erro) return L.responder(res, r.status, { erro: r.erro });
     try {
       return L.responder(res, 201, await salvar(db, u, r, { pdf, nome }));
     } catch (e){
-      if (e && e.code === '23505') return L.responder(res, 409, { erro: (await guiaRepetida(db, u.clinica_id, r.nova.tipo, r.nova.numero)) || 'Essa guia já foi enviada.' });
+      if (e && e.code === '23505') return L.responder(res, 409, { erro: (await guiaRepetida(db, u.clinica_id, r.nova)) || 'Essa guia já foi enviada.' });
       throw e;
     }
   }
@@ -83,7 +83,7 @@ module.exports = L.rota(async (req, res) => {
     const id = Number(p.get('id'));
     if (!Number.isInteger(id) || id <= 0) return L.responder(res, 400, { erro: 'Anexo inválido.' });
     const [anexo] = await db.query(
-      `SELECT a.id, a.chave, a.guia_id, g.tipo, g.numero, to_char(g.data_atendimento, 'DD-MM-YYYY') AS data_br,
+      `SELECT a.id, a.chave, a.guia_id, g.tipo, g.numero, g.convenio, to_char(g.data_atendimento, 'DD-MM-YYYY') AS data_br,
               (SELECT count(*)::int FROM anexos x WHERE x.guia_id = g.id) AS qtd,
               (SELECT count(*)::int FROM anexos x WHERE x.guia_id = g.id AND x.id <= a.id) AS ordem
          FROM anexos a JOIN guias g ON g.id = a.guia_id
@@ -105,7 +105,7 @@ module.exports = L.rota(async (req, res) => {
     // Equipe Faturas Med abriu/baixou: a guia deixa de ser "nova".
     if (u.perfil === 'faturas') await db.query(`UPDATE guias SET baixado_em = now() WHERE id = $1 AND baixado_em IS NULL`, [anexo.guia_id]);
 
-    const nomeArquivo = `${anexo.tipo === 'consulta' ? 'CONSULTA' : 'HONORARIO'}_${anexo.numero}_${anexo.data_br}${anexo.qtd > 1 ? '_' + anexo.ordem : ''}.pdf`;
+    const nomeArquivo = `${anexo.convenio ? L.slug(anexo.convenio) + '_' : ''}${anexo.tipo === 'consulta' ? 'CONSULTA' : 'HONORARIO'}_${anexo.numero}_${anexo.data_br}${anexo.qtd > 1 ? '_' + anexo.ordem : ''}.pdf`;
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', conteudo.length);
@@ -122,6 +122,8 @@ module.exports = L.rota(async (req, res) => {
 // { nova:{tipo,numero,data} } | { guia:{...} } ou { erro, status }.
 async function conferirDestino(db, u, corpo){
   if (corpo.nova){
+    const convenio = String(corpo.nova.convenio || '');
+    if (!L.CONVENIOS.includes(convenio)) return { erro: 'Escolha o convênio da guia.', status: 400 };
     const tipo = corpo.nova.tipo;
     if (tipo !== 'consulta' && tipo !== 'honorario') return { erro: 'Escolha se a guia é de consulta ou de honorário.', status: 400 };
     const numero = limparNumero(corpo.nova.numero);
@@ -129,9 +131,10 @@ async function conferirDestino(db, u, corpo){
     const data = String(corpo.nova.data || '');
     const erroData = conferirData(data);
     if (erroData) return { erro: erroData, status: 400 };
-    const repetida = await guiaRepetida(db, u.clinica_id, tipo, numero);
+    const nova = { convenio, tipo, numero, data };
+    const repetida = await guiaRepetida(db, u.clinica_id, nova);
     if (repetida) return { erro: repetida, status: 409 };
-    return { nova: { tipo, numero, data } };
+    return { nova };
   }
   const guiaId = Number(corpo.guia);
   if (!Number.isInteger(guiaId) || guiaId <= 0) return { erro: 'Guia inválida.', status: 400 };
@@ -150,11 +153,11 @@ async function conferirDestino(db, u, corpo){
 // { chave, nome, tamanho } (já está no armazenamento).
 async function salvar(db, u, destino, arquivo){
   if (destino.nova){
-    const { tipo, numero, data } = destino.nova;
+    const { convenio, tipo, numero, data } = destino.nova;
     const [guia] = await db.query(
-      `INSERT INTO guias (clinica_id, tipo, numero, data_atendimento, competencia, enviado_por)
-       VALUES ($1, $2, $3, $4::date, $5, $6) RETURNING id`,
-      [u.clinica_id, tipo, numero, data, data.slice(0, 7), u.id]
+      `INSERT INTO guias (clinica_id, convenio, tipo, numero, data_atendimento, competencia, enviado_por)
+       VALUES ($1, $2, $3, $4, $5::date, $6, $7) RETURNING id`,
+      [u.clinica_id, convenio, tipo, numero, data, data.slice(0, 7), u.id]
     );
     try {
       await gravarAnexo(db, { clinicaId: u.clinica_id, guiaId: guia.id, competencia: data.slice(0, 7), tipo, numero, ordem: 1 }, arquivo);
@@ -162,7 +165,7 @@ async function salvar(db, u, destino, arquivo){
       await db.query(`DELETE FROM guias WHERE id = $1`, [guia.id]);
       throw e;
     }
-    return { ok: true, guia_id: guia.id, competencia: data.slice(0, 7) };
+    return { ok: true, guia_id: guia.id, competencia: data.slice(0, 7), convenio };
   }
   const g = destino.guia;
   await gravarAnexo(db, { clinicaId: u.clinica_id, guiaId: g.id, competencia: g.competencia, tipo: g.tipo, numero: g.numero, ordem: g.qtd + 1 }, arquivo);
@@ -182,15 +185,15 @@ async function gravarAnexo(db, g, arquivo){
   );
 }
 
-async function guiaRepetida(db, clinicaId, tipo, numero){
+async function guiaRepetida(db, clinicaId, { convenio, tipo, numero }){
   const [g] = await db.query(
     `SELECT to_char(criado_em AT TIME ZONE 'America/Sao_Paulo', 'DD/MM/YYYY') AS enviada,
             to_char(data_atendimento, 'DD/MM/YYYY') AS atendimento
-       FROM guias WHERE clinica_id = $1 AND tipo = $2 AND numero = $3 AND excluido_em IS NULL`,
-    [clinicaId, tipo, numero]
+       FROM guias WHERE clinica_id = $1 AND convenio = $2 AND tipo = $3 AND numero = $4 AND excluido_em IS NULL`,
+    [clinicaId, convenio, tipo, numero]
   );
   if (!g) return null;
-  return `A guia ${numero} (${tipo === 'consulta' ? 'consulta' : 'honorário'}, atendimento ${g.atendimento}) já foi enviada em ${g.enviada}. Se a anterior estava errada, exclua ela antes de enviar de novo.`;
+  return `A guia ${numero} (${convenio}, ${tipo === 'consulta' ? 'consulta' : 'honorário'}, atendimento ${g.atendimento}) já foi enviada em ${g.enviada}. Se a anterior estava errada, exclua ela antes de enviar de novo.`;
 }
 
 function limparNumero(valor){

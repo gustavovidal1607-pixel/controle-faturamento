@@ -10,6 +10,8 @@
   const MESES_CURTO = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
   const LIMITE_PDF = 100 * 1024 * 1024; // teto de segurança
   const MAX_ANEXOS = 10;
+  const CONVENIOS = ['Bradesco Saúde', 'Bradesco Operadora', 'MedSênior', 'Mediservice'];
+  const slug = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
 
   const estado = {
     usuario: null,
@@ -20,6 +22,7 @@
     guias: [],
     clinica: '',          // só Faturas: '' = todas
     filtroTipo: 'todas',
+    filtroConvenio: '',
     busca: '',
     verExcluidas: false,
     selecionadas: new Set(),
@@ -41,7 +44,7 @@
   }
   const tamanhoBR = n => n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
   const tipoNome = t => t === 'consulta' ? 'Consulta' : 'Honorário';
-  const nomePdf = (g, i, total) => `${g.tipo === 'consulta' ? 'CONSULTA' : 'HONORARIO'}_${g.numero}_${dataBR(g.data_atendimento).replace(/\//g, '-')}${total > 1 ? '_' + (i + 1) : ''}.pdf`;
+  const nomePdf = (g, i, total) => `${g.convenio ? slug(g.convenio) + '_' : ''}${g.tipo === 'consulta' ? 'CONSULTA' : 'HONORARIO'}_${g.numero}_${dataBR(g.data_atendimento).replace(/\//g, '-')}${total > 1 ? '_' + (i + 1) : ''}.pdf`;
 
   function aviso(texto, erro){
     const el = document.createElement('div');
@@ -238,7 +241,14 @@
       <p class="sub">Uma guia por vez.</p>
       <form id="form-anexar" novalidate>
         <fieldset class="passo">
-          <legend><span class="passo-n">1</span> É uma guia de:</legend>
+          <legend><span class="passo-n">1</span> Convênio</legend>
+          <div class="convenios">
+            ${CONVENIOS.map(c => `<label class="convenio"><input type="radio" name="convenio" value="${h(c)}"><span>${h(c)}</span></label>`).join('')}
+          </div>
+        </fieldset>
+
+        <fieldset class="passo" id="passo-tipo" disabled>
+          <legend><span class="passo-n">2</span> É uma guia de:</legend>
           <div class="tipos">
             <label class="tipo">
               <input type="radio" name="tipo" value="consulta">
@@ -254,7 +264,7 @@
         </fieldset>
 
         <fieldset class="passo" id="passo-dados" disabled>
-          <legend><span class="passo-n">2</span> Dados da guia</legend>
+          <legend><span class="passo-n">3</span> Dados da guia</legend>
           <div class="dupla">
             <label class="campo"><span>Número da guia</span><input name="numero" inputmode="text" autocomplete="off" maxlength="30" placeholder="Ex.: 12345678"></label>
             <label class="campo"><span>Data do atendimento</span><input name="data" type="date" max="${hojeISO()}" min="2020-01-01"></label>
@@ -262,7 +272,7 @@
         </fieldset>
 
         <fieldset class="passo" id="passo-pdf" disabled>
-          <legend><span class="passo-n">3</span> <span id="rotulo-pdf">PDF da guia</span></legend>
+          <legend><span class="passo-n">4</span> <span id="rotulo-pdf">PDF da guia</span></legend>
           <label class="soltar" id="soltar">
             <input type="file" name="pdf" accept="application/pdf,.pdf">
             <strong>Arraste o PDF aqui ou <u>escolha o arquivo</u></strong>
@@ -289,8 +299,10 @@
     const inputPdf = f.pdf;
     arquivosEscolhidos = [];
 
-    const tipoAtual = () => f.tipo.value;
+    const tipoAtual = () => (f.convenio.value ? f.tipo.value : '');
     function atualizarPassos(){
+      const convenio = f.convenio.value;
+      $('#passo-tipo').disabled = !convenio;
       const tipo = tipoAtual();
       $('#passo-dados').disabled = !tipo;
       const dadosOk = !!tipo && f.numero.value.trim() && f.data.value;
@@ -373,7 +385,7 @@
         : new URLSearchParams({ guia: destino.guia, nome: arquivo.name });
       return enviarPdfPeloServidor(`/api/arquivos?${q}`, arquivo, aoProgredir);
     }
-    const pasta = destino.nova ? `${destino.nova.data.slice(0, 7)}/${destino.nova.tipo}-${destino.nova.numero}` : (destino.pasta || 'anexos');
+    const pasta = destino.nova ? `${destino.nova.data.slice(0, 7)}/${slug(destino.nova.convenio)}-${destino.nova.tipo}-${destino.nova.numero}` : (destino.pasta || 'anexos');
     const caminho = `clinica-${estado.usuario.clinica_id}/${pasta}-${Date.now()}.pdf`.replace(/[^A-Za-z0-9/._-]/g, '_');
     let r;
     try {
@@ -423,7 +435,8 @@
     const botao = $('#btn-enviar');
     const barra = $('#progresso'), barraInterna = $('#progresso div'), texto = $('#progresso-texto');
     erro.textContent = '';
-    const tipo = f.tipo.value, numero = f.numero.value.trim().replace(/\s+/g, ''), data = f.data.value;
+    const convenio = f.convenio.value, tipo = f.tipo.value, numero = f.numero.value.trim().replace(/\s+/g, ''), data = f.data.value;
+    if (!CONVENIOS.includes(convenio)){ erro.textContent = 'Escolha o convênio da guia.'; return; }
     if (!/^[0-9A-Za-z./-]{1,30}$/.test(numero)){ erro.textContent = 'O número da guia só pode ter números, letras, ponto, barra e traço.'; f.numero.focus(); return; }
     if (data > hojeISO()){ erro.textContent = 'A data do atendimento não pode ser depois de hoje.'; f.data.focus(); return; }
     const arquivos = arquivosEscolhidos.slice();
@@ -436,17 +449,17 @@
 
     let guiaId = null, competencia = null, enviados = 0;
     try {
-      const nova = { tipo, numero, data };
+      const nova = { convenio, tipo, numero, data };
       await conferirDestino({ nova });
       progresso(0, 0);
       const r = await enviarArquivo({ nova }, arquivos[0], p => progresso(0, p));
       guiaId = r.guia_id; competencia = r.competencia; enviados = 1;
       for (let i = 1; i < total; i++){
         progresso(i, 0);
-        await enviarArquivo({ guia: guiaId, pasta: `${competencia}/${tipo}-${numero}` }, arquivos[i], p => progresso(i, p));
+        await enviarArquivo({ guia: guiaId, pasta: `${competencia}/${slug(convenio)}-${tipo}-${numero}` }, arquivos[i], p => progresso(i, p));
         enviados++;
       }
-      aviso(`Guia ${numero} enviada${total > 1 ? ` com ${total} PDFs` : ''} — ${mesNome(competencia)}.`);
+      aviso(`Guia ${numero} (${convenio}) enviada${total > 1 ? ` com ${total} PDFs` : ''} — ${mesNome(competencia)}.`);
       f.reset();
       arquivosEscolhidos = [];
       $('#lista-arquivos').innerHTML = '';
@@ -543,6 +556,10 @@
               <button type="button" data-tipo="consulta" aria-pressed="${estado.filtroTipo === 'consulta'}">Consultas</button>
               <button type="button" data-tipo="honorario" aria-pressed="${estado.filtroTipo === 'honorario'}">Honorários</button>
             </div>
+            <select id="filtro-convenio" aria-label="Convênio">
+              <option value="">Todos os convênios</option>
+              ${CONVENIOS.map(c => `<option value="${h(c)}" ${estado.filtroConvenio === c ? 'selected' : ''}>${h(c)}</option>`).join('')}
+            </select>
             <input type="search" id="busca" placeholder="Buscar número" value="${h(estado.busca)}" aria-label="Buscar pelo número da guia">
             ${u.perfil === 'faturas' ? `<label class="marcar"><input type="checkbox" id="ver-excluidas" ${estado.verExcluidas ? 'checked' : ''}> mostrar excluídas</label>` : ''}
           </div>
@@ -566,6 +583,7 @@
       renderizarTabela();
     };
     $('#busca').oninput = ev => { estado.busca = ev.target.value; renderizarTabela(); };
+    $('#filtro-convenio').onchange = ev => { estado.filtroConvenio = ev.target.value; renderizarTabela(); };
     const ve = $('#ver-excluidas');
     if (ve) ve.onchange = () => { estado.verExcluidas = ve.checked; carregarGuias(); };
   }
@@ -588,7 +606,9 @@
 
   function guiasFiltradas(){
     const b = estado.busca.replace(/\s+/g, '').toUpperCase();
-    return estado.guias.filter(g => (estado.filtroTipo === 'todas' || g.tipo === estado.filtroTipo) && (!b || g.numero.includes(b)));
+    return estado.guias.filter(g => (estado.filtroTipo === 'todas' || g.tipo === estado.filtroTipo)
+      && (!estado.filtroConvenio || g.convenio === estado.filtroConvenio)
+      && (!b || g.numero.includes(b)));
   }
 
   function renderizarTabela(){
@@ -616,7 +636,7 @@
       <table class="guias">
         <thead><tr>
           ${faturas ? `<th><input type="checkbox" id="marcar-todas" aria-label="Marcar todas"></th>` : ''}
-          <th>Guia</th><th>Tipo</th><th>Atendimento</th>${mostrarClinica ? '<th>Clínica</th>' : ''}<th>PDF</th><th>Enviada</th><th>Situação</th><th></th>
+          <th>Guia</th><th>Convênio</th><th>Tipo</th><th>Atendimento</th>${mostrarClinica ? '<th>Clínica</th>' : ''}<th>PDF</th><th>Enviada</th><th>Situação</th><th></th>
         </tr></thead>
         <tbody>
         ${lista.map(g => {
@@ -635,6 +655,7 @@
           return `<tr class="${excluida ? 'excluida' : ''} ${estado.destacar === g.id ? 'nova-linha' : ''}" data-id="${g.id}">
             ${faturas ? `<td>${excluida ? '' : `<input type="checkbox" data-marcar="${g.id}" ${estado.selecionadas.has(g.id) ? 'checked' : ''} aria-label="Marcar guia ${h(g.numero)}">`}</td>` : ''}
             <td class="c-num"><span class="num">${h(g.numero)}</span></td>
+            <td class="c-conv" data-r="Convênio:"><span class="chip conv">${h(g.convenio || '—')}</span></td>
             <td class="c-tipo"><span class="chip ${g.tipo}">${tipoNome(g.tipo)}</span></td>
             <td class="c-dt dt" data-r="Atendimento:">${dataBR(g.data_atendimento)}</td>
             ${mostrarClinica ? `<td class="c-clin" data-r="Clínica:">${h(g.clinica_nome)}</td>` : ''}
@@ -685,7 +706,7 @@
     if (!g) return;
     const ok = await confirmar({
       titulo: 'Excluir esta guia?',
-      texto: `Guia <strong>${h(g.numero)}</strong> (${tipoNome(g.tipo).toLowerCase()}, atendimento ${dataBR(g.data_atendimento)})${g.anexos.length > 1 ? ` e os ${g.anexos.length} PDFs dela` : ' e o PDF dela'} saem da lista. Depois você pode enviar a guia certa.`,
+      texto: `Guia <strong>${h(g.numero)}</strong> (${h(g.convenio)}, ${tipoNome(g.tipo).toLowerCase()}, atendimento ${dataBR(g.data_atendimento)})${g.anexos.length > 1 ? ` e os ${g.anexos.length} PDFs dela` : ' e o PDF dela'} saem da lista. Depois você pode enviar a guia certa.`,
       botao: 'Excluir guia', perigo: true,
     });
     if (!ok) return;
@@ -724,7 +745,7 @@
       try {
         await conferirDestino({ guia: guiaId });
         for (const a of arquivos){
-          await enviarArquivo({ guia: guiaId, pasta: `${g.competencia}/${g.tipo}-${g.numero}` }, a, () => {});
+          await enviarArquivo({ guia: guiaId, pasta: `${g.competencia}/${slug(g.convenio)}-${g.tipo}-${g.numero}` }, a, () => {});
           n++;
         }
         aviso(`${n} PDF${n > 1 ? 's anexados' : ' anexado'} à guia ${g.numero}.`);
@@ -764,7 +785,7 @@
           const r = await fetch(`/api/arquivos?id=${g.anexos[i].id}`, { credentials: 'same-origin' });
           if (!r.ok) throw new Error(`Não deu para baixar o PDF da guia ${g.numero}.`);
           const pasta = umaClinica ? '' : g.clinica_nome.replace(/[\\/:*?"<>|]/g, '-') + '/';
-          zip.adicionar(`${pasta}${g.tipo === 'consulta' ? 'CONSULTAS' : 'HONORARIOS'}/${nomePdf(g, i, g.anexos.length)}`, new Uint8Array(await r.arrayBuffer()));
+          zip.adicionar(`${pasta}${g.convenio ? slug(g.convenio) + '/' : ''}${g.tipo === 'consulta' ? 'CONSULTAS' : 'HONORARIOS'}/${nomePdf(g, i, g.anexos.length)}`, new Uint8Array(await r.arrayBuffer()));
           if (!g.baixado_em) g.baixado_em = new Date().toISOString();
         }
       }
